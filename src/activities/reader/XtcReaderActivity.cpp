@@ -82,7 +82,7 @@ void XtcReaderActivity::loop() {
   }
 
   // When long-press chapter skip is disabled, turn pages on press instead of release.
-  const bool usePressForPageTurn = !SETTINGS.longPressChapterSkip;
+  const bool usePressForPageTurn = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
   const bool tiltNext = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
   const bool tiltPrev = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
   const bool prevTriggered =
@@ -114,7 +114,8 @@ void XtcReaderActivity::loop() {
   }
 
   const bool fromTilt = tiltPrev || tiltNext;
-  const bool skipPages = !fromTilt && SETTINGS.longPressChapterSkip && mappedInput.getHeldTime() > skipPageMs;
+  const bool skipPages =
+      !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && mappedInput.getHeldTime() > skipPageMs;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
@@ -179,7 +180,8 @@ void XtcReaderActivity::renderPage() {
   // Load page data
   size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
   if (bytesRead == 0) {
-    LOG_ERR("XTR", "Failed to load page %lu", currentPage);
+    LOG_ERR("XTR", "Failed to load page %lu: bufferSize=%lu bitDepth=%u error=%s", currentPage, pageBufferSize,
+            bitDepth, xtc::errorToString(xtc->getLastError()));
     free(pageBuffer);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
@@ -359,4 +361,22 @@ void XtcReaderActivity::loadProgress() {
     }
     f.close();
   }
+}
+
+ScreenshotInfo XtcReaderActivity::getScreenshotInfo() const {
+  ScreenshotInfo info;
+  info.readerType = ScreenshotInfo::ReaderType::Xtc;
+  if (xtc) {
+    const std::string t = xtc->getTitle();
+    snprintf(info.title, sizeof(info.title), "%s", t.c_str());
+    const uint32_t pageCount = xtc->getPageCount();
+    info.totalPages = pageCount;
+    // Clamp to last valid page to avoid sentinel value (currentPage == pageCount)
+    uint32_t clampedPage = (pageCount > 0 && currentPage >= pageCount) ? pageCount - 1 : currentPage;
+    info.progressPercent = pageCount > 0 ? xtc->calculateProgress(clampedPage) : 0;
+    info.currentPage = static_cast<int>(clampedPage) + 1;
+  } else {
+    info.currentPage = currentPage + 1;
+  }
+  return info;
 }
