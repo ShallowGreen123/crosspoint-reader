@@ -63,8 +63,7 @@ struct ActivityResult {
 
   explicit ActivityResult() = default;
 
-  template <typename ResultType>
-    requires std::is_constructible_v<ResultVariant, ResultType&&>
+  template <typename ResultType, typename = std::enable_if_t<std::is_constructible<ResultVariant, ResultType&&>::value>>
   // cppcheck-suppress noExplicitConstructor
   ActivityResult(ResultType&& result) : data{std::forward<ResultType>(result)} {}
 };

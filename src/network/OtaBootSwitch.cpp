@@ -2,7 +2,7 @@
 
 #include <Logging.h>
 #include <esp_rom_crc.h>
-#include <spi_flash_mmap.h>
+#include <esp_spi_flash.h>
 #include <string.h>
 
 namespace ota_boot {

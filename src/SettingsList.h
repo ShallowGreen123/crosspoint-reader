@@ -132,7 +132,7 @@ inline const std::vector<SettingInfo>& getSettingsList() {
         SettingInfo::Toggle(StrId::STR_BATTERY, &CrossPointSettings::statusBarBattery, "statusBarBattery",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
-    // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
+    // Only show tilt page turn setting when a tilt sensor is available.
     if (halTiltSensor.isAvailable()) {
       // Insert after the short power button setting (end of Controls section)
       for (auto it = v.begin(); it != v.end(); ++it) {

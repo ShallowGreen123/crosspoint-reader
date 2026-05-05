@@ -1,7 +1,16 @@
 #pragma once
 
 #include <HalStorage.h>
+#if __has_include(<NetworkUdp.h>)
+#include <NetworkClient.h>
 #include <NetworkUdp.h>
+using CrossPointNetworkClient = NetworkClient;
+#else
+#include <WiFiClient.h>
+#include <WiFiUdp.h>
+using CrossPointNetworkClient = WiFiClient;
+using NetworkUDP = WiFiUDP;
+#endif
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 

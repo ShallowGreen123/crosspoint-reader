@@ -6,8 +6,10 @@
 #include "HalStorage.h"
 #include "Logging.h"
 #include "esp_debug_helpers.h"
+#include "esp_attr.h"
+#if CONFIG_IDF_TARGET_ESP32C3
 #include "esp_private/esp_cpu_internal.h"
-#include "esp_private/esp_system_attr.h"
+#endif
 #include "esp_private/panic_internal.h"
 
 #define MAX_PANIC_STACK_DEPTH 32
@@ -42,6 +44,7 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
     panicStack[i].sp = 0;
   }
 
+#if CONFIG_IDF_TARGET_ESP32C3
   // Copied from components/esp_system/port/arch/riscv/panic_arch.c
   uint32_t sp = (uint32_t)((RvExcFrame*)frame)->sp;
   const int per_line = 8;
@@ -63,6 +66,9 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
       break;
     }
   }
+#else
+  (void)core;
+#endif
 
   __real_panic_print_backtrace(frame, core);
 }
@@ -142,7 +148,11 @@ std::string getPanicInfo(bool full) {
 
 bool isRebootFromPanic() {
   const auto resetReason = esp_reset_reason();
-  return resetReason == ESP_RST_PANIC || resetReason == ESP_RST_CPU_LOCKUP;
+  if (resetReason == ESP_RST_PANIC) return true;
+#ifdef ESP_RST_CPU_LOCKUP
+  if (resetReason == ESP_RST_CPU_LOCKUP) return true;
+#endif
+  return false;
 }
 
 }  // namespace HalSystem

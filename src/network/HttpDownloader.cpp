@@ -2,8 +2,17 @@
 
 #include <HTTPClient.h>
 #include <Logging.h>
+#if __has_include(<NetworkClient.h>)
 #include <NetworkClient.h>
 #include <NetworkClientSecure.h>
+using CrossPointHttpClient = NetworkClient;
+using CrossPointHttpClientSecure = NetworkClientSecure;
+#else
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+using CrossPointHttpClient = WiFiClient;
+using CrossPointHttpClientSecure = WiFiClientSecure;
+#endif
 #include <StreamString.h>
 #include <base64.h>
 
@@ -53,13 +62,13 @@ class FileWriteStream final : public Stream {
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
                               const std::string& password) {
-  std::unique_ptr<NetworkClient> client;
+  std::unique_ptr<CrossPointHttpClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
+    auto* secureClient = new CrossPointHttpClientSecure();
     secureClient->setInsecure();
     client.reset(secureClient);
   } else {
-    client.reset(new NetworkClient());
+    client.reset(new CrossPointHttpClient());
   }
   HTTPClient http;
 
@@ -103,13 +112,13 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, const std::string& username,
                                                              const std::string& password) {
-  std::unique_ptr<NetworkClient> client;
+  std::unique_ptr<CrossPointHttpClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
-    auto* secureClient = new NetworkClientSecure();
+    auto* secureClient = new CrossPointHttpClientSecure();
     secureClient->setInsecure();
     client.reset(secureClient);
   } else {
-    client.reset(new NetworkClient());
+    client.reset(new CrossPointHttpClient());
   }
   HTTPClient http;
 

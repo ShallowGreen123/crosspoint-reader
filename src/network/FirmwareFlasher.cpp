@@ -5,8 +5,8 @@
 #include <Logging.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <esp_spi_flash.h>
 #include <mbedtls/sha256.h>
-#include <spi_flash_mmap.h>
 
 #include <algorithm>
 #include <cstring>

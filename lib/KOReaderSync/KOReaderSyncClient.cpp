@@ -5,12 +5,19 @@
 #include <base64.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <esp_idf_version.h>
 
 #include <ctime>
 
 #include "KOReaderCredentialStore.h"
 
 int KOReaderSyncClient::lastHttpCode = 0;
+
+#if ESP_IDF_VERSION_MAJOR >= 5
+#define KOREADER_CRT_BUNDLE_ATTACH esp_crt_bundle_attach
+#else
+#define KOREADER_CRT_BUNDLE_ATTACH arduino_esp_crt_bundle_attach
+#endif
 
 namespace {
 // Device identifier for CrossPoint reader
@@ -66,7 +73,7 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   config.timeout_ms = 15000;
   config.buffer_size = HTTP_BUF_SIZE;
   config.buffer_size_tx = HTTP_BUF_SIZE;
-  config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.crt_bundle_attach = KOREADER_CRT_BUNDLE_ATTACH;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) return nullptr;

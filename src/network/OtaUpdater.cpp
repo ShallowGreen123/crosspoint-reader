@@ -5,7 +5,14 @@
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
+#include <esp_idf_version.h>
 #include <esp_wifi.h>
+
+#if ESP_IDF_VERSION_MAJOR >= 5
+#define CROSSPOINT_CRT_BUNDLE_ATTACH esp_crt_bundle_attach
+#else
+#define CROSSPOINT_CRT_BUNDLE_ATTACH arduino_esp_crt_bundle_attach
+#endif
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
@@ -37,7 +44,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
       .buffer_size_tx = 8192,
       .user_data = &releaseParser,
       .skip_cert_common_name_check = true,
-      .crt_bundle_attach = esp_crt_bundle_attach,
+      .crt_bundle_attach = CROSSPOINT_CRT_BUNDLE_ATTACH,
       .keep_alive_enable = true,
   };
 
@@ -158,7 +165,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
       .buffer_size = 8192,
       .buffer_size_tx = 8192,
       .skip_cert_common_name_check = true,
-      .crt_bundle_attach = esp_crt_bundle_attach,
+      .crt_bundle_attach = CROSSPOINT_CRT_BUNDLE_ATTACH,
       .keep_alive_enable = true,
   };
 

@@ -1,91 +1,255 @@
 #include <HalDisplay.h>
-#include <HalGPIO.h>
+
+#include <BoardT5S3.h>
+#include <Logging.h>
+#include <esp_heap_caps.h>
+
+#include <algorithm>
+#include <cstring>
 
 // Global HalDisplay instance
 HalDisplay display;
 
-#define SD_SPI_MISO 7
+namespace {
+uint8_t bitAt(const uint8_t* buffer, uint32_t index) {
+  return (buffer[index >> 3] >> (7 - (index & 7))) & 0x01;
+}
+}  // namespace
 
-HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY) {}
+HalDisplay::HalDisplay() = default;
 
-HalDisplay::~HalDisplay() {}
+HalDisplay::~HalDisplay() {
+  free(grayscaleLsbBuffer);
+  free(grayscaleMsbBuffer);
+}
+
+uint8_t* HalDisplay::allocatePlane() {
+  auto* plane = static_cast<uint8_t*>(heap_caps_malloc(BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!plane) {
+    plane = static_cast<uint8_t*>(malloc(BUFFER_SIZE));
+  }
+  return plane;
+}
 
 void HalDisplay::begin() {
-  // Set X3-specific panel mode before initializing.
-  if (gpio.deviceIsX3()) {
-    einkDisplay.setDisplayX3();
+  BoardT5S3::beginI2C();
+
+  int rc = epaper.initPanel(BB_PANEL_EPDIY_V7_16);
+  if (rc != BBEP_SUCCESS) {
+    LOG_ERR("DSP", "FastEPD initPanel failed: %d", rc);
+    return;
   }
 
-  einkDisplay.begin();
+  rc = epaper.setPanelSize(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  if (rc != BBEP_SUCCESS) {
+    LOG_ERR("DSP", "FastEPD setPanelSize failed: %d", rc);
+    return;
+  }
 
-  // Request resync after specific wakeup events to ensure clean display state
-  const auto wakeupReason = gpio.getWakeupReason();
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
-      wakeupReason == HalGPIO::WakeupReason::Other) {
-    einkDisplay.requestResync();
+  epaper.setMode(BB_MODE_1BPP);
+  clearScreen(0xFF);
+  syncPreviousBuffer();
+  displayReady = true;
+
+  LOG_INF("DSP", "FastEPD T5S3 display initialized: %ux%u", DISPLAY_WIDTH, DISPLAY_HEIGHT);
+}
+
+void HalDisplay::clearScreen(uint8_t color) const {
+  uint8_t* frameBuffer = getFrameBuffer();
+  if (frameBuffer) {
+    memset(frameBuffer, color, BUFFER_SIZE);
   }
 }
 
-void HalDisplay::clearScreen(uint8_t color) const { einkDisplay.clearScreen(color); }
-
 void HalDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                            bool fromProgmem) const {
-  einkDisplay.drawImage(imageData, x, y, w, h, fromProgmem);
+  uint8_t* frameBuffer = getFrameBuffer();
+  if (!frameBuffer || !imageData || x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT) {
+    return;
+  }
+
+  const uint16_t imageWidthBytes = w / 8;
+  const uint16_t destByteX = x / 8;
+  for (uint16_t row = 0; row < h; row++) {
+    const uint16_t destY = y + row;
+    if (destY >= DISPLAY_HEIGHT) {
+      break;
+    }
+    const uint32_t destOffset = static_cast<uint32_t>(destY) * DISPLAY_WIDTH_BYTES + destByteX;
+    const uint32_t srcOffset = static_cast<uint32_t>(row) * imageWidthBytes;
+    for (uint16_t col = 0; col < imageWidthBytes; col++) {
+      if ((destByteX + col) >= DISPLAY_WIDTH_BYTES) {
+        break;
+      }
+      frameBuffer[destOffset + col] =
+          fromProgmem ? pgm_read_byte(&imageData[srcOffset + col]) : imageData[srcOffset + col];
+    }
+  }
 }
 
 void HalDisplay::drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                                       bool fromProgmem) const {
-  einkDisplay.drawImageTransparent(imageData, x, y, w, h, fromProgmem);
+  uint8_t* frameBuffer = getFrameBuffer();
+  if (!frameBuffer || !imageData || x >= DISPLAY_WIDTH || y >= DISPLAY_HEIGHT) {
+    return;
+  }
+
+  const uint16_t imageWidthBytes = w / 8;
+  const uint16_t destByteX = x / 8;
+  for (uint16_t row = 0; row < h; row++) {
+    const uint16_t destY = y + row;
+    if (destY >= DISPLAY_HEIGHT) {
+      break;
+    }
+    const uint32_t destOffset = static_cast<uint32_t>(destY) * DISPLAY_WIDTH_BYTES + destByteX;
+    const uint32_t srcOffset = static_cast<uint32_t>(row) * imageWidthBytes;
+    for (uint16_t col = 0; col < imageWidthBytes; col++) {
+      if ((destByteX + col) >= DISPLAY_WIDTH_BYTES) {
+        break;
+      }
+      const uint8_t srcByte = fromProgmem ? pgm_read_byte(&imageData[srcOffset + col]) : imageData[srcOffset + col];
+      frameBuffer[destOffset + col] &= srcByte;
+    }
+  }
 }
 
-EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
-  switch (mode) {
-    case HalDisplay::FULL_REFRESH:
-      return EInkDisplay::FULL_REFRESH;
-    case HalDisplay::HALF_REFRESH:
-      return EInkDisplay::HALF_REFRESH;
-    case HalDisplay::FAST_REFRESH:
-    default:
-      return EInkDisplay::FAST_REFRESH;
+void HalDisplay::syncPreviousBuffer() const {
+  uint8_t* current = epaper.currentBuffer();
+  uint8_t* previous = epaper.previousBuffer();
+  if (current && previous) {
+    memcpy(previous, current, BUFFER_SIZE);
   }
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
+  if (!displayReady) {
+    return;
   }
 
-  einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
-}
-
-void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
+  epaper.setMode(BB_MODE_1BPP);
+  (void)turnOffScreen;
+  const bool keepOn = false;
+  int rc = BBEP_SUCCESS;
+  switch (mode) {
+    case FULL_REFRESH:
+      rc = epaper.fullUpdate(CLEAR_SLOW, keepOn);
+      break;
+    case HALF_REFRESH:
+      rc = epaper.fullUpdate(CLEAR_FAST, keepOn);
+      break;
+    case FAST_REFRESH:
+    default:
+      rc = epaper.partialUpdate(keepOn);
+      break;
   }
 
-  einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
+  if (rc != BBEP_SUCCESS) {
+    LOG_ERR("DSP", "FastEPD displayBuffer failed: %d", rc);
+  }
+  syncPreviousBuffer();
 }
 
-void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
+void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) { displayBuffer(mode, turnOffScreen); }
 
-uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
+void HalDisplay::deepSleep() {
+  if (displayReady) {
+    epaper.einkPower(0);
+    epaper.deInit();
+  }
+  BoardT5S3::deinitForSleep();
+}
+
+uint8_t* HalDisplay::getFrameBuffer() const { return epaper.currentBuffer(); }
 
 void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
-  einkDisplay.copyGrayscaleBuffers(lsbBuffer, msbBuffer);
+  copyGrayscaleLsbBuffers(lsbBuffer);
+  copyGrayscaleMsbBuffers(msbBuffer);
 }
 
-void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer); }
+void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) {
+  if (!lsbBuffer) {
+    return;
+  }
+  if (!grayscaleLsbBuffer) {
+    grayscaleLsbBuffer = allocatePlane();
+  }
+  if (grayscaleLsbBuffer) {
+    memcpy(grayscaleLsbBuffer, lsbBuffer, BUFFER_SIZE);
+  }
+}
 
-void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay.copyGrayscaleMsbBuffers(msbBuffer); }
+void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) {
+  if (!msbBuffer) {
+    return;
+  }
+  if (!grayscaleMsbBuffer) {
+    grayscaleMsbBuffer = allocatePlane();
+  }
+  if (grayscaleMsbBuffer) {
+    memcpy(grayscaleMsbBuffer, msbBuffer, BUFFER_SIZE);
+  }
+}
 
-void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
+void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
+  epaper.setMode(BB_MODE_1BPP);
+  uint8_t* frameBuffer = getFrameBuffer();
+  if (frameBuffer && bwBuffer) {
+    memcpy(frameBuffer, bwBuffer, BUFFER_SIZE);
+  }
+  syncPreviousBuffer();
+}
 
-void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }
+void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+  if (!displayReady || !grayscaleLsbBuffer || !grayscaleMsbBuffer) {
+    return;
+  }
 
-uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
+  const uint8_t* bwBuffer = getFrameBuffer();
+  if (!bwBuffer) {
+    return;
+  }
 
-uint16_t HalDisplay::getDisplayHeight() const { return einkDisplay.getDisplayHeight(); }
+  epaper.setMode(BB_MODE_4BPP);
+  uint8_t* grayBuffer = epaper.currentBuffer();
+  if (!grayBuffer) {
+    return;
+  }
 
-uint16_t HalDisplay::getDisplayWidthBytes() const { return einkDisplay.getDisplayWidthBytes(); }
+  const uint32_t pixelCount = static_cast<uint32_t>(DISPLAY_WIDTH) * DISPLAY_HEIGHT;
+  for (uint32_t pixel = 0; pixel < pixelCount; pixel += 2) {
+    auto grayForPixel = [&](uint32_t idx) -> uint8_t {
+      if (bitAt(bwBuffer, idx)) {
+        return 0x0F;
+      }
+      const bool lsb = bitAt(grayscaleLsbBuffer, idx);
+      const bool msb = bitAt(grayscaleMsbBuffer, idx);
+      if (msb && lsb) {
+        return 0x05;
+      }
+      if (msb) {
+        return 0x0A;
+      }
+      if (lsb) {
+        return 0x05;
+      }
+      return 0x00;
+    };
 
-uint32_t HalDisplay::getBufferSize() const { return einkDisplay.getBufferSize(); }
+    const uint8_t hi = grayForPixel(pixel);
+    const uint8_t lo = (pixel + 1 < pixelCount) ? grayForPixel(pixel + 1) : 0x0F;
+    grayBuffer[pixel >> 1] = static_cast<uint8_t>((hi << 4) | lo);
+  }
+
+  const int rc = epaper.fullUpdate(CLEAR_NONE, !turnOffScreen);
+  if (rc != BBEP_SUCCESS) {
+    LOG_ERR("DSP", "FastEPD grayscale update failed: %d", rc);
+  }
+}
+
+uint16_t HalDisplay::getDisplayWidth() const { return DISPLAY_WIDTH; }
+
+uint16_t HalDisplay::getDisplayHeight() const { return DISPLAY_HEIGHT; }
+
+uint16_t HalDisplay::getDisplayWidthBytes() const { return DISPLAY_WIDTH_BYTES; }
+
+uint32_t HalDisplay::getBufferSize() const { return BUFFER_SIZE; }

@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include <EInkDisplay.h>
+#include <FastEPD.h>
 
 class HalDisplay {
  public:
@@ -21,8 +21,8 @@ class HalDisplay {
   void begin();
 
   // Display dimensions
-  static constexpr uint16_t DISPLAY_WIDTH = EInkDisplay::DISPLAY_WIDTH;
-  static constexpr uint16_t DISPLAY_HEIGHT = EInkDisplay::DISPLAY_HEIGHT;
+  static constexpr uint16_t DISPLAY_WIDTH = 960;
+  static constexpr uint16_t DISPLAY_HEIGHT = 540;
   static constexpr uint16_t DISPLAY_WIDTH_BYTES = DISPLAY_WIDTH / 8;
   static constexpr uint32_t BUFFER_SIZE = DISPLAY_WIDTH_BYTES * DISPLAY_HEIGHT;
 
@@ -56,7 +56,13 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
-  EInkDisplay einkDisplay;
+  mutable FASTEPD epaper;
+  uint8_t* grayscaleLsbBuffer = nullptr;
+  uint8_t* grayscaleMsbBuffer = nullptr;
+  bool displayReady = false;
+
+  void syncPreviousBuffer() const;
+  uint8_t* allocatePlane();
 };
 
 extern HalDisplay display;

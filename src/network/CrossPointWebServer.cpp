@@ -537,7 +537,7 @@ void CrossPointWebServer::handleDownload() const {
   server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
-  NetworkClient client = server->client();
+  CrossPointNetworkClient client = server->client();
   const size_t chunkSize = 4096;
   uint8_t buffer[chunkSize];
 
@@ -557,7 +557,11 @@ void CrossPointWebServer::handleDownload() const {
       totalWritten += wrote;
     }
   }
+#if __has_include(<NetworkClient.h>)
   client.clear();
+#else
+  while (client.available()) client.read();
+#endif
   file.close();
 }
 
