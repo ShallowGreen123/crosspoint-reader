@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <BoardT5S3.h>
 #include <FastEPD.h>
 
 class HalDisplay {
@@ -21,8 +22,12 @@ class HalDisplay {
   void begin();
 
   // Display dimensions
-  static constexpr uint16_t DISPLAY_WIDTH = 960;
-  static constexpr uint16_t DISPLAY_HEIGHT = 540;
+  static constexpr uint16_t VISIBLE_WIDTH = BoardT5S3Pins::DisplayWidth;
+  static constexpr uint16_t VISIBLE_HEIGHT = BoardT5S3Pins::DisplayHeight;
+  // FastEPD's 1bpp update path processes 16 pixels at a time, so keep the
+  // scanline stride padded while exposing the real 540px width to the UI.
+  static constexpr uint16_t DISPLAY_WIDTH = ((VISIBLE_WIDTH + 15) / 16) * 16;
+  static constexpr uint16_t DISPLAY_HEIGHT = VISIBLE_HEIGHT;
   static constexpr uint16_t DISPLAY_WIDTH_BYTES = DISPLAY_WIDTH / 8;
   static constexpr uint32_t BUFFER_SIZE = DISPLAY_WIDTH_BYTES * DISPLAY_HEIGHT;
 
@@ -52,6 +57,8 @@ class HalDisplay {
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;
   uint16_t getDisplayHeight() const;
+  uint16_t getVisibleWidth() const;
+  uint16_t getVisibleHeight() const;
   uint16_t getDisplayWidthBytes() const;
   uint32_t getBufferSize() const;
 

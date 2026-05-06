@@ -88,7 +88,7 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 
   // Display a border around the screen to indicate a screenshot was taken
   if (renderer.storeBwBuffer()) {
-    renderer.drawRect(6, 6, renderer.getDisplayHeight() - 12, renderer.getDisplayWidth() - 12, 2, true);
+    renderer.drawRect(6, 6, renderer.getScreenWidth() - 12, renderer.getScreenHeight() - 12, 2, true);
     renderer.displayBuffer();
     delay(1000);
     renderer.restoreBwBuffer();
@@ -101,9 +101,9 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     return false;
   }
 
-  // Note: the width and height, we rotate the image 90d counter-clockwise to match the default display orientation
-  int phyWidth = height;
-  int phyHeight = width;
+  const int phyWidth = width;
+  const int phyHeight = height;
+  const int framebufferStride = (width + 7) / 8;
 
   std::string path(filename);
   size_t last_slash = path.find_last_of('/');
@@ -139,8 +139,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
   }
 
   const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
-  // Max row size for 528px height (X3) after rotation = 68 bytes; use fixed buffer to avoid VLA
-  constexpr size_t kMaxRowSize = 68;
+  constexpr size_t kMaxRowSize = (HalDisplay::DISPLAY_WIDTH + 31) / 32 * 4;
   if (rowSizePadded > kMaxRowSize) {
     LOG_ERR("SCR", "Row size %u exceeds buffer capacity", rowSizePadded);
     // Explicitly close() file before calling Storage.remove()
@@ -149,17 +148,14 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     return false;
   }
 
-  // rotate the image 90d counter-clockwise on-the-fly while writing to save memory
   uint8_t rowBuffer[kMaxRowSize];
   memset(rowBuffer, 0, rowSizePadded);
 
   for (int outY = 0; outY < phyHeight; outY++) {
     for (int outX = 0; outX < phyWidth; outX++) {
-      // 90d counter-clockwise: source (srcX, srcY)
-      // BMP rows are bottom-to-top, so outY=0 is the bottom of the displayed image
-      int srcX = width - 1 - outY;     // phyHeight == width
-      int srcY = phyWidth - 1 - outX;  // phyWidth == height
-      int fbIndex = srcY * (width / 8) + (srcX / 8);
+      const int srcX = outX;
+      const int srcY = phyHeight - 1 - outY;
+      int fbIndex = srcY * framebufferStride + (srcX / 8);
       uint8_t pixel = (framebuffer[fbIndex] >> (7 - (srcX % 8))) & 0x01;
       rowBuffer[outX / 8] |= pixel << (7 - (outX % 8));
     }

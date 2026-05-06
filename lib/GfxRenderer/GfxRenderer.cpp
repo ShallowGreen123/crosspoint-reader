@@ -33,6 +33,8 @@ void GfxRenderer::begin() {
   }
   panelWidth = display.getDisplayWidth();
   panelHeight = display.getDisplayHeight();
+  visibleWidth = display.getVisibleWidth();
+  visibleHeight = display.getVisibleHeight();
   panelWidthBytes = display.getDisplayWidthBytes();
   frameBufferSize = display.getBufferSize();
   bwBufferChunks.assign((frameBufferSize + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE, nullptr);
@@ -43,32 +45,26 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.ins
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
 // This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
-                                     int* phyY, const uint16_t panelWidth, const uint16_t panelHeight) {
+                                     int* phyY, const uint16_t visibleWidth, const uint16_t visibleHeight) {
   switch (orientation) {
     case GfxRenderer::Portrait: {
-      // Logical portrait (480x800) → panel (800x480)
-      // Rotation: 90 degrees clockwise
-      *phyX = y;
-      *phyY = panelHeight - 1 - x;
+      *phyX = x;
+      *phyY = y;
       break;
     }
     case GfxRenderer::LandscapeClockwise: {
-      // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *phyX = panelWidth - 1 - x;
-      *phyY = panelHeight - 1 - y;
-      break;
-    }
-    case GfxRenderer::PortraitInverted: {
-      // Logical portrait (480x800) → panel (800x480)
-      // Rotation: 90 degrees counter-clockwise
-      *phyX = panelWidth - 1 - y;
+      *phyX = visibleWidth - 1 - y;
       *phyY = x;
       break;
     }
+    case GfxRenderer::PortraitInverted: {
+      *phyX = visibleWidth - 1 - x;
+      *phyY = visibleHeight - 1 - y;
+      break;
+    }
     case GfxRenderer::LandscapeCounterClockwise: {
-      // Logical landscape (800x480) aligned with panel orientation
-      *phyX = x;
-      *phyY = y;
+      *phyX = y;
+      *phyY = visibleHeight - 1 - x;
       break;
     }
   }
@@ -177,7 +173,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   int phyY = 0;
 
   // Note: this call should be inlined for better performance
-  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+  rotateCoordinates(orientation, x, y, &phyX, &phyY, visibleWidth, visibleHeight);
 
   // Bounds checking against runtime panel dimensions
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
@@ -645,20 +641,20 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   int rotatedX = 0;
   int rotatedY = 0;
-  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
+  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, visibleWidth, visibleHeight);
   // Rotate origin corner
   switch (orientation) {
     case Portrait:
-      rotatedY = rotatedY - height;
       break;
     case PortraitInverted:
       rotatedX = rotatedX - width;
+      rotatedY = rotatedY - height;
       break;
     case LandscapeClockwise:
-      rotatedY = rotatedY - height;
-      rotatedX = rotatedX - width;
+      rotatedX = rotatedX - height;
       break;
     case LandscapeCounterClockwise:
+      rotatedY = rotatedY - width;
       break;
   }
   // TODO: Rotate bits
@@ -666,6 +662,10 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
+  if (orientation == Portrait) {
+    display.drawImageTransparent(bitmap, x, y, width, height);
+    return;
+  }
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
@@ -1015,28 +1015,24 @@ int GfxRenderer::getScreenWidth() const {
   switch (orientation) {
     case Portrait:
     case PortraitInverted:
-      // 480px wide in portrait logical coordinates
-      return panelHeight;
+      return visibleWidth;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
-      // 800px wide in landscape logical coordinates
-      return panelWidth;
+      return visibleHeight;
   }
-  return panelHeight;
+  return visibleWidth;
 }
 
 int GfxRenderer::getScreenHeight() const {
   switch (orientation) {
     case Portrait:
     case PortraitInverted:
-      // 800px tall in portrait logical coordinates
-      return panelWidth;
+      return visibleHeight;
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
-      // 480px tall in landscape logical coordinates
-      return panelHeight;
+      return visibleWidth;
   }
-  return panelWidth;
+  return visibleHeight;
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {

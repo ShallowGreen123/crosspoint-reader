@@ -20,12 +20,13 @@ class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
 
-  // Logical screen orientation from the perspective of callers
+  // Logical screen orientation from the perspective of callers.
+  // The T5S3 panel is mounted as a native portrait display.
   enum Orientation {
-    Portrait,                  // 480x800 logical coordinates (current default)
-    LandscapeClockwise,        // 800x480 logical coordinates, rotated 180° (swap top/bottom)
-    PortraitInverted,          // 480x800 logical coordinates, inverted
-    LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
+    Portrait,
+    LandscapeClockwise,
+    PortraitInverted,
+    LandscapeCounterClockwise
   };
 
  private:
@@ -38,6 +39,8 @@ class GfxRenderer {
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
+  uint16_t visibleWidth = HalDisplay::VISIBLE_WIDTH;
+  uint16_t visibleHeight = HalDisplay::VISIBLE_HEIGHT;
   uint16_t panelWidthBytes = HalDisplay::DISPLAY_WIDTH_BYTES;
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
@@ -160,5 +163,7 @@ class GfxRenderer {
   size_t getBufferSize() const;
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }
+  uint16_t getDisplayVisibleWidth() const { return visibleWidth; }
+  uint16_t getDisplayVisibleHeight() const { return visibleHeight; }
   uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }
 };

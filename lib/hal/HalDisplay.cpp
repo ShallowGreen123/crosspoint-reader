@@ -34,7 +34,9 @@ uint8_t* HalDisplay::allocatePlane() {
 void HalDisplay::begin() {
   BoardT5S3::beginI2C();
 
-  int rc = epaper.initPanel(BB_PANEL_EPDIY_V7_16);
+  // int rc = epaper.initPanel(BB_PANEL_EPDIY_V7);
+  int rc = epaper.initPanel(BB_PANEL_EPDIY_V7, 26666666);
+  // epaper.setPanelSize(960, 540);
   if (rc != BBEP_SUCCESS) {
     LOG_ERR("DSP", "FastEPD initPanel failed: %d", rc);
     return;
@@ -51,7 +53,8 @@ void HalDisplay::begin() {
   syncPreviousBuffer();
   displayReady = true;
 
-  LOG_INF("DSP", "FastEPD T5S3 display initialized: %ux%u", DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  LOG_INF("DSP", "FastEPD T5S3 display initialized: %ux%u visible, %ux%u scan", VISIBLE_WIDTH, VISIBLE_HEIGHT,
+          DISPLAY_WIDTH, DISPLAY_HEIGHT);
 }
 
 void HalDisplay::clearScreen(uint8_t color) const {
@@ -249,6 +252,10 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
 uint16_t HalDisplay::getDisplayWidth() const { return DISPLAY_WIDTH; }
 
 uint16_t HalDisplay::getDisplayHeight() const { return DISPLAY_HEIGHT; }
+
+uint16_t HalDisplay::getVisibleWidth() const { return VISIBLE_WIDTH; }
+
+uint16_t HalDisplay::getVisibleHeight() const { return VISIBLE_HEIGHT; }
 
 uint16_t HalDisplay::getDisplayWidthBytes() const { return DISPLAY_WIDTH_BYTES; }
 
