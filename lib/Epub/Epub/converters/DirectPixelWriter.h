@@ -32,35 +32,11 @@ struct DirectPixelWriter {
     mode = renderer.getRenderMode();
     displayWidthBytes = renderer.getDisplayWidthBytes();
 
-    const int phyW = renderer.getDisplayVisibleWidth();
-    const int phyH = renderer.getDisplayVisibleHeight();
+    const int phyW = renderer.getDisplayWidth();
+    const int phyH = renderer.getDisplayHeight();
 
     switch (renderer.getOrientation()) {
       case GfxRenderer::Portrait:
-        phyXBase = 0;
-        phyYBase = 0;
-        phyXStepX = 1;
-        phyYStepX = 0;
-        phyXStepY = 0;
-        phyYStepY = 1;
-        break;
-      case GfxRenderer::LandscapeClockwise:
-        phyXBase = phyW - 1;
-        phyYBase = 0;
-        phyXStepX = 0;
-        phyYStepX = 1;
-        phyXStepY = -1;
-        phyYStepY = 0;
-        break;
-      case GfxRenderer::PortraitInverted:
-        phyXBase = phyW - 1;
-        phyYBase = phyH - 1;
-        phyXStepX = -1;
-        phyYStepX = 0;
-        phyXStepY = 0;
-        phyYStepY = -1;
-        break;
-      case GfxRenderer::LandscapeCounterClockwise:
         phyXBase = 0;
         phyYBase = phyH - 1;
         phyXStepX = 0;
@@ -68,8 +44,32 @@ struct DirectPixelWriter {
         phyXStepY = 1;
         phyYStepY = 0;
         break;
+      case GfxRenderer::LandscapeClockwise:
+        phyXBase = phyW - 1;
+        phyYBase = phyH - 1;
+        phyXStepX = -1;
+        phyYStepX = 0;
+        phyXStepY = 0;
+        phyYStepY = -1;
+        break;
+      case GfxRenderer::PortraitInverted:
+        phyXBase = phyW - 1;
+        phyYBase = 0;
+        phyXStepX = 0;
+        phyYStepX = 1;
+        phyXStepY = -1;
+        phyYStepY = 0;
+        break;
+      case GfxRenderer::LandscapeCounterClockwise:
+        phyXBase = 0;
+        phyYBase = 0;
+        phyXStepX = 1;
+        phyYStepX = 0;
+        phyXStepY = 0;
+        phyYStepY = 1;
+        break;
       default:
-        // Fallback to native portrait coordinates.
+        // Fallback to LandscapeCounterClockwise (identity transform).
         phyXBase = 0;
         phyYBase = 0;
         phyXStepX = 1;

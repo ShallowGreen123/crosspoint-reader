@@ -22,12 +22,12 @@ class HalDisplay {
   void begin();
 
   // Display dimensions
-  static constexpr uint16_t VISIBLE_WIDTH = BoardT5S3Pins::DisplayWidth;
-  static constexpr uint16_t VISIBLE_HEIGHT = BoardT5S3Pins::DisplayHeight;
-  // FastEPD's 1bpp update path processes 16 pixels at a time, so keep the
-  // scanline stride padded while exposing the real 540px width to the UI.
-  static constexpr uint16_t DISPLAY_WIDTH = ((VISIBLE_WIDTH + 15) / 16) * 16;
-  static constexpr uint16_t DISPLAY_HEIGHT = VISIBLE_HEIGHT;
+  static constexpr uint16_t VISIBLE_WIDTH = BoardT5S3Pins::LogicalWidth;
+  static constexpr uint16_t VISIBLE_HEIGHT = BoardT5S3Pins::LogicalHeight;
+  // FastEPD scans the panel in physical orientation. Keep the framebuffer in
+  // physical 960x540 while exposing portrait logical coordinates to the UI.
+  static constexpr uint16_t DISPLAY_WIDTH = ((BoardT5S3Pins::DisplayWidth + 15) / 16) * 16;
+  static constexpr uint16_t DISPLAY_HEIGHT = BoardT5S3Pins::DisplayHeight;
   static constexpr uint16_t DISPLAY_WIDTH_BYTES = DISPLAY_WIDTH / 8;
   static constexpr uint32_t BUFFER_SIZE = DISPLAY_WIDTH_BYTES * DISPLAY_HEIGHT;
 
@@ -67,6 +67,7 @@ class HalDisplay {
   uint8_t* grayscaleLsbBuffer = nullptr;
   uint8_t* grayscaleMsbBuffer = nullptr;
   bool displayReady = false;
+  bool forceFullRefresh = true;
 
   void syncPreviousBuffer() const;
   uint8_t* allocatePlane();

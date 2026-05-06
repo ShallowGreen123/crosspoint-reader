@@ -180,8 +180,22 @@ void waitForPowerRelease() {
   }
 }
 
+bool shouldSuppressDeepSleepForDebug() {
+#ifdef ENABLE_SERIAL_LOG
+  return Serial;
+#else
+  return false;
+#endif
+}
+
 // Enter deep sleep mode
 void enterDeepSleep() {
+  if (shouldSuppressDeepSleepForDebug()) {
+    LOG_DBG("MAIN", "Deep sleep suppressed while serial is connected");
+    waitForPowerRelease();
+    return;
+  }
+
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
   APP_STATE.saveToFile();
@@ -237,16 +251,15 @@ void setup() {
   halTiltSensor.begin();
 
 #ifdef ENABLE_SERIAL_LOG
-  if (gpio.isUsbConnected()) {
-    Serial.begin(115200);
-    const unsigned long start = millis();
-    while (!Serial && (millis() - start) < 500) {
-      delay(10);
-    }
+  Serial.begin(115200);
+  const unsigned long serialStart = millis();
+  while (!Serial && (millis() - serialStart) < 500) {
+    delay(10);
   }
 #endif
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.getDeviceName());
+  LOG_INF("MAIN", "Touch detect: %d", gpio.isTouchAvailable());
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
@@ -272,6 +285,9 @@ void setup() {
       LOG_DBG("MAIN", "Verifying power button press duration");
       gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
                                    SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+      break;
+    case HalGPIO::WakeupReason::Touch:
+      LOG_DBG("MAIN", "Wakeup reason: Touch");
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
@@ -375,7 +391,11 @@ void loop() {
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
-      activityManager.preventAutoSleep()) {
+      activityManager.preventAutoSleep()
+#ifdef ENABLE_SERIAL_LOG
+      || Serial
+#endif
+  ) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
@@ -402,11 +422,13 @@ void loop() {
     return;
   }
 
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (millis() > 5000 && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
+    LOG_DBG("MAIN", "Power button sleep request, held=%lu ms", gpio.getHeldTime());
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

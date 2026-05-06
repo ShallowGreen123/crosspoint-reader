@@ -51,6 +51,7 @@ void HalDisplay::begin() {
   epaper.setMode(BB_MODE_1BPP);
   clearScreen(0xFF);
   syncPreviousBuffer();
+  forceFullRefresh = true;
   displayReady = true;
 
   LOG_INF("DSP", "FastEPD T5S3 display initialized: %ux%u visible, %ux%u scan", VISIBLE_WIDTH, VISIBLE_HEIGHT,
@@ -132,6 +133,10 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   epaper.setMode(BB_MODE_1BPP);
   (void)turnOffScreen;
   const bool keepOn = false;
+  if (forceFullRefresh && mode == FAST_REFRESH) {
+    LOG_DBG("DSP", "Forcing full refresh for first display update");
+    mode = FULL_REFRESH;
+  }
   int rc = BBEP_SUCCESS;
   switch (mode) {
     case FULL_REFRESH:
@@ -149,6 +154,7 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   if (rc != BBEP_SUCCESS) {
     LOG_ERR("DSP", "FastEPD displayBuffer failed: %d", rc);
   }
+  forceFullRefresh = false;
   syncPreviousBuffer();
 }
 

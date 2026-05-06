@@ -8,6 +8,8 @@ HalGPIO gpio;
 
 namespace {
 constexpr uint16_t TOUCH_SWIPE_THRESHOLD = 70;
+constexpr uint64_t POWER_WAKE_MASK = 1ULL << T5S3_BOOT_BTN;
+constexpr uint64_t TOUCH_WAKE_MASK = 1ULL << T5S3_TOUCH_INT;
 
 uint8_t buttonBit(uint8_t button) { return static_cast<uint8_t>(1U << button); }
 
@@ -21,9 +23,6 @@ uint8_t mapTouchZone(uint16_t x, uint16_t y) {
 
   if (y < 96 && x < 128) {
     return HalGPIO::BTN_BACK;
-  }
-  if (y < 96 && x > T5S3_LOGICAL_WIDTH - 128) {
-    return HalGPIO::BTN_POWER;
   }
   if (y < T5S3_LOGICAL_HEIGHT / 4) {
     return HalGPIO::BTN_UP;
@@ -51,6 +50,16 @@ uint8_t mapSwipe(uint16_t startX, uint16_t startY, uint16_t x, uint16_t y, uint8
   }
   return dy > 0 ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
 }
+
+void rotatePhysicalTouchToLogical(uint16_t* x, uint16_t* y) {
+  const uint16_t physicalX = *x;
+  const uint16_t physicalY = *y;
+
+  if (physicalX < T5S3_WIDTH && physicalY < T5S3_HEIGHT) {
+    *x = T5S3_HEIGHT - 1 - physicalY;
+    *y = physicalX;
+  }
+}
 }  // namespace
 
 void HalGPIO::begin() {
@@ -72,18 +81,14 @@ uint8_t HalGPIO::readTouchState() {
 
   uint16_t x = point.x;
   uint16_t y = point.y;
-  if (x < T5S3_WIDTH && y < T5S3_HEIGHT && x > T5S3_LOGICAL_WIDTH) {
-    const uint16_t logicalX = T5S3_HEIGHT - 1 - y;
-    const uint16_t logicalY = x;
-    x = logicalX;
-    y = logicalY;
-  }
+  rotatePhysicalTouchToLogical(&x, &y);
 
   if (!touchActive) {
     touchActive = true;
     touchStartX = x;
     touchStartY = y;
     latchedTouchButton = mapTouchZone(x, y);
+    LOG_DBG("HW", "Touch raw=(%u,%u) logical=(%u,%u) button=%u", point.x, point.y, x, y, latchedTouchButton);
   } else {
     latchedTouchButton = mapSwipe(touchStartX, touchStartY, x, y, latchedTouchButton);
   }
@@ -165,7 +170,13 @@ void HalGPIO::startDeepSleep() {
 
   BoardT5S3::deinitForSleep();
   pinMode(T5S3_BOOT_BTN, INPUT_PULLUP);
-  esp_sleep_enable_ext1_wakeup(1ULL << T5S3_BOOT_BTN, ESP_EXT1_WAKEUP_ANY_LOW);
+  pinMode(T5S3_TOUCH_INT, INPUT_PULLUP);
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  esp_deep_sleep_enable_gpio_wakeup(POWER_WAKE_MASK | TOUCH_WAKE_MASK, ESP_GPIO_WAKEUP_GPIO_LOW);
+#else
+  esp_sleep_enable_ext1_wakeup(POWER_WAKE_MASK | TOUCH_WAKE_MASK, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
   esp_deep_sleep_start();
 }
 
@@ -204,7 +215,27 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto resetReason = esp_reset_reason();
   const bool usbConnected = isUsbConnected();
 
-  if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || (resetReason == ESP_RST_POWERON && !usbConnected)) {
+  if (wakeupCause == ESP_SLEEP_WAKEUP_EXT1) {
+    const uint64_t wakeStatus = esp_sleep_get_ext1_wakeup_status();
+    if ((wakeStatus & POWER_WAKE_MASK) != 0) {
+      return WakeupReason::PowerButton;
+    }
+    if ((wakeStatus & TOUCH_WAKE_MASK) != 0) {
+      return WakeupReason::Touch;
+    }
+  }
+
+  if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO) {
+    if (digitalRead(T5S3_BOOT_BTN) == LOW) {
+      return WakeupReason::PowerButton;
+    }
+    if (digitalRead(T5S3_TOUCH_INT) == LOW) {
+      return WakeupReason::Touch;
+    }
+    return WakeupReason::Other;
+  }
+
+  if (resetReason == ESP_RST_POWERON && !usbConnected) {
     return WakeupReason::PowerButton;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {

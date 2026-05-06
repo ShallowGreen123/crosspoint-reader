@@ -36,6 +36,7 @@ class HalGPIO {
   inline const char* getDeviceName() const { return "T5S3"; }
 
   void begin();
+  bool isTouchAvailable() const { return touch.isAvailable(); }
 
   void update();
   bool isPressed(uint8_t buttonIndex) const;
@@ -51,7 +52,7 @@ class HalGPIO {
   bool isUsbConnected() const;
   bool wasUsbStateChanged() const;
 
-  enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
+  enum class WakeupReason { PowerButton, Touch, AfterFlash, AfterUSBPower, Other };
 
   WakeupReason getWakeupReason() const;
 

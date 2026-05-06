@@ -19,6 +19,7 @@ constexpr uint16_t GT911_STATUS_REG = 0x814E;
 constexpr uint16_t GT911_POINT1_REG = 0x814F;
 constexpr uint8_t GT911_STATUS_READY = 0x80;
 constexpr uint8_t GT911_TOUCH_COUNT_MASK = 0x0F;
+constexpr uint8_t GT911_BACKUP_ADDR = 0x14;
 
 bool i2cWriteReg(uint8_t addr, uint8_t reg, const uint8_t* data, size_t len) {
   Wire.beginTransmission(addr);
@@ -200,7 +201,7 @@ bool isUsbConnected() {
 }
 
 bool GT911Touch::writeReg8(uint16_t reg, uint8_t value) {
-  Wire.beginTransmission(T5S3_GT911_ADDR);
+  Wire.beginTransmission(address);
   Wire.write(static_cast<uint8_t>(reg >> 8));
   Wire.write(static_cast<uint8_t>(reg & 0xFF));
   Wire.write(value);
@@ -208,14 +209,14 @@ bool GT911Touch::writeReg8(uint16_t reg, uint8_t value) {
 }
 
 bool GT911Touch::readReg(uint16_t reg, uint8_t* data, size_t len) {
-  Wire.beginTransmission(T5S3_GT911_ADDR);
+  Wire.beginTransmission(address);
   Wire.write(static_cast<uint8_t>(reg >> 8));
   Wire.write(static_cast<uint8_t>(reg & 0xFF));
   if (Wire.endTransmission(false) != 0) {
     return false;
   }
   const uint8_t requested = static_cast<uint8_t>(len);
-  if (Wire.requestFrom(static_cast<uint8_t>(T5S3_GT911_ADDR), requested) != requested) {
+  if (Wire.requestFrom(address, requested) != requested) {
     while (Wire.available()) {
       Wire.read();
     }
@@ -227,22 +228,44 @@ bool GT911Touch::readReg(uint16_t reg, uint8_t* data, size_t len) {
   return true;
 }
 
-bool GT911Touch::begin() {
+void GT911Touch::resetForAddress(uint8_t addr) {
+  // GT911 samples INT while RESET is released to select its I2C address.
+  // INT low selects 0x5D; INT high selects 0x14.
   pinMode(T5S3_TOUCH_INT, OUTPUT);
-  digitalWrite(T5S3_TOUCH_INT, HIGH);
+  digitalWrite(T5S3_TOUCH_INT, addr == T5S3_GT911_ADDR ? LOW : HIGH);
   pinMode(T5S3_TOUCH_RST, OUTPUT);
   digitalWrite(T5S3_TOUCH_RST, LOW);
   delay(20);
   digitalWrite(T5S3_TOUCH_RST, HIGH);
   delay(60);
   pinMode(T5S3_TOUCH_INT, INPUT);
+  delay(5);
+}
 
+bool GT911Touch::probeAddress(uint8_t addr) {
+  address = addr;
   uint8_t productId[4] = {0, 0, 0, 0};
   available = readReg(GT911_PRODUCT_ID_REG, productId, sizeof(productId));
   if (available) {
     writeReg8(GT911_STATUS_REG, 0);
   }
   return available;
+}
+
+bool GT911Touch::begin() {
+  resetForAddress(T5S3_GT911_ADDR);
+  if (probeAddress(T5S3_GT911_ADDR)) {
+    return true;
+  }
+
+  resetForAddress(GT911_BACKUP_ADDR);
+  if (probeAddress(GT911_BACKUP_ADDR)) {
+    return true;
+  }
+
+  address = T5S3_GT911_ADDR;
+  available = false;
+  return false;
 }
 
 bool GT911Touch::readPoint(TouchPoint* point) {

@@ -45,26 +45,26 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.ins
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
 // This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
-                                     int* phyY, const uint16_t visibleWidth, const uint16_t visibleHeight) {
+                                     int* phyY, const uint16_t panelWidth, const uint16_t panelHeight) {
   switch (orientation) {
     case GfxRenderer::Portrait: {
-      *phyX = x;
-      *phyY = y;
+      *phyX = y;
+      *phyY = panelHeight - 1 - x;
       break;
     }
     case GfxRenderer::LandscapeClockwise: {
-      *phyX = visibleWidth - 1 - y;
-      *phyY = x;
+      *phyX = panelWidth - 1 - x;
+      *phyY = panelHeight - 1 - y;
       break;
     }
     case GfxRenderer::PortraitInverted: {
-      *phyX = visibleWidth - 1 - x;
-      *phyY = visibleHeight - 1 - y;
+      *phyX = panelWidth - 1 - y;
+      *phyY = x;
       break;
     }
     case GfxRenderer::LandscapeCounterClockwise: {
-      *phyX = y;
-      *phyY = visibleHeight - 1 - x;
+      *phyX = x;
+      *phyY = y;
       break;
     }
   }
@@ -173,7 +173,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   int phyY = 0;
 
   // Note: this call should be inlined for better performance
-  rotateCoordinates(orientation, x, y, &phyX, &phyY, visibleWidth, visibleHeight);
+  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
 
   // Bounds checking against runtime panel dimensions
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
@@ -641,20 +641,20 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   int rotatedX = 0;
   int rotatedY = 0;
-  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, visibleWidth, visibleHeight);
+  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
   // Rotate origin corner
   switch (orientation) {
     case Portrait:
+      rotatedY = rotatedY - height;
       break;
     case PortraitInverted:
       rotatedX = rotatedX - width;
-      rotatedY = rotatedY - height;
       break;
     case LandscapeClockwise:
-      rotatedX = rotatedX - height;
+      rotatedY = rotatedY - height;
+      rotatedX = rotatedX - width;
       break;
     case LandscapeCounterClockwise:
-      rotatedY = rotatedY - width;
       break;
   }
   // TODO: Rotate bits
@@ -662,10 +662,6 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  if (orientation == Portrait) {
-    display.drawImageTransparent(bitmap, x, y, width, height);
-    return;
-  }
   display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 

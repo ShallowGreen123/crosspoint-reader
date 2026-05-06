@@ -36,6 +36,9 @@ class GT911Touch {
   bool isAvailable() const { return available; }
 
  private:
+  uint8_t address = T5S3_GT911_ADDR;
+  void resetForAddress(uint8_t addr);
+  bool probeAddress(uint8_t addr);
   bool available = false;
   bool writeReg8(uint16_t reg, uint8_t value);
   bool readReg(uint16_t reg, uint8_t* data, size_t len);
