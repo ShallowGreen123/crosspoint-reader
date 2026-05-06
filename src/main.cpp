@@ -414,25 +414,25 @@ void loop() {
     screenshotButtonsReleased = true;
   }
 
-  const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  if (millis() - lastActivityTime >= sleepTimeoutMs) {
-    LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
-    enterDeepSleep();
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
-    return;
-  }
+  // const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
+  // if (millis() - lastActivityTime >= sleepTimeoutMs) {
+  //   LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
+  //   enterDeepSleep();
+  //   // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+  //   return;
+  // }
 
-  if (millis() > 5000 && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    // If the screenshot combination is potentially being pressed, don't sleep
-    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
-      return;
-    }
-    LOG_DBG("MAIN", "Power button sleep request, held=%lu ms", gpio.getHeldTime());
-    enterDeepSleep();
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
-    return;
-  }
+  // if (millis() > 5000 && gpio.isPressed(HalGPIO::BTN_POWER) &&
+  //     gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  //   // If the screenshot combination is potentially being pressed, don't sleep
+  //   if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
+  //     return;
+  //   }
+  //   LOG_DBG("MAIN", "Power button sleep request, held=%lu ms", gpio.getHeldTime());
+  //   enterDeepSleep();
+  //   // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+  //   return;
+  // }
 
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&

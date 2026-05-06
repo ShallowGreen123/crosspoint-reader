@@ -55,10 +55,10 @@ void rotatePhysicalTouchToLogical(uint16_t* x, uint16_t* y) {
   const uint16_t physicalX = *x;
   const uint16_t physicalY = *y;
 
-  if (physicalX < T5S3_WIDTH && physicalY < T5S3_HEIGHT) {
-    *x = T5S3_HEIGHT - 1 - physicalY;
-    *y = physicalX;
-  }
+  // if (physicalX < T5S3_WIDTH && physicalY < T5S3_HEIGHT) {
+  //   *x = T5S3_HEIGHT - 1 - physicalY;
+  //   *y = physicalX;
+  // }
 }
 }  // namespace
 
